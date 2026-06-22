@@ -1262,8 +1262,10 @@ nav.bottom button .ico{font-size:20px;line-height:1}
   font-size:15px;
 }
 
-/* Sidebar hidden on mobile by default */
-nav.sidebar{ display:none !important; }
+/* Sidebar hidden on mobile */
+@media (max-width: 767px) {
+  nav.sidebar{ display:none !important; }
+}
 
 /* ============================================================
    RESPONSIVE – PC LAYOUT (min-width: 768px)
@@ -1281,7 +1283,7 @@ nav.sidebar{ display:none !important; }
 
   /* Sidebar nav */
   nav.sidebar{
-    display:flex;
+    display:flex !important;
     position:fixed;
     left:0;
     top:0;

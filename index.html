@@ -16,6 +16,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
 :root{
   --rose:#F2A7B0;
@@ -1632,6 +1635,92 @@ nav.sidebar .nav-item .ico svg{width:18px;height:18px}
 .show-all-link:hover{text-decoration:underline}
 
 /* ============================================================
+   LOGIN SCREEN v22
+   ============================================================ */
+.login-screen{
+  position:fixed;
+  inset:0;
+  background:var(--cream);
+  background:linear-gradient(160deg, var(--cream), var(--rose-pale) 60%, var(--sage-pale));
+  z-index:400;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+}
+.login-card{
+  background:rgba(255,255,255,.7);
+  backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,.6);
+  border-radius:28px;
+  padding:40px 30px;
+  max-width:400px;
+  width:100%;
+  text-align:center;
+  box-shadow:0 20px 60px rgba(61,53,48,.15);
+}
+.login-logo{
+  font-family:'Cormorant Garamond',serif;
+  font-weight:500;
+  font-size:42px;
+  letter-spacing:-.5px;
+  color:var(--dark);
+  margin-bottom:8px;
+}
+.login-logo span{color:var(--rose);font-style:italic}
+.login-tagline{
+  font-family:'Cormorant Garamond',serif;
+  font-style:italic;
+  font-size:18px;
+  color:var(--mid);
+  margin-bottom:20px;
+}
+.login-desc{
+  font-size:13px;
+  color:var(--soft);
+  line-height:1.5;
+  margin-bottom:28px;
+}
+.login-btn{
+  width:100%;
+  padding:15px;
+  font-size:15px;
+  border-radius:14px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.login-note{
+  font-size:12px;
+  margin-top:14px;
+  min-height:16px;
+  color:var(--rose);
+}
+.login-privacy{
+  font-size:11px;
+  color:var(--soft);
+  line-height:1.4;
+  margin-top:24px;
+  padding-top:16px;
+  border-top:1px solid var(--cream-dark);
+}
+/* Hide app body until authed */
+body.not-authed .app, body.not-authed nav.bottom, body.not-authed nav.sidebar{ display:none !important; }
+/* Sync indicator */
+.sync-dot{
+  display:inline-block;
+  width:7px;height:7px;
+  border-radius:50%;
+  background:var(--sage);
+  margin-left:6px;
+  vertical-align:middle;
+  transition:background .3s;
+}
+.sync-dot.syncing{background:var(--gold)}
+.sync-dot.error{background:var(--rose)}
+
+/* ============================================================
    WELCOME / LANDING PAGE v21
    ============================================================ */
 #page-welcome{
@@ -2113,6 +2202,21 @@ button:focus-visible, input:focus-visible, select:focus-visible{
 </style>
 </head>
 <body>
+
+<!-- LOGIN SCREEN -->
+<div class="login-screen" id="loginScreen" style="display:none">
+  <div class="login-card">
+    <div class="login-logo">Nutri<span>Track</span></div>
+    <div class="login-tagline">Tvoj pokojný sprievodca chudnutím.</div>
+    <div class="login-desc">Prihlás sa a maj svoje dáta bezpečne v cloude — dostupné na všetkých tvojich zariadeniach.</div>
+    <button class="btn btn-r login-btn" id="loginGoogleBtn" onclick="signInGoogle()">
+      <svg width="18" height="18" viewBox="0 0 24 24" style="vertical-align:-4px;margin-right:8px"><path fill="#fff" d="M12 11v2.8h4c-.2 1-1.3 3-4 3-2.4 0-4.3-2-4.3-4.4S9.6 8 12 8c1.4 0 2.3.6 2.8 1.1l1.9-1.8C15.5 6.2 13.9 5.5 12 5.5c-3.6 0-6.5 2.9-6.5 6.5s2.9 6.5 6.5 6.5c3.7 0 6.2-2.6 6.2-6.3 0-.4 0-.7-.1-1H12z"/></svg>
+      Prihlásiť sa cez Google
+    </button>
+    <div class="login-note" id="loginNote"></div>
+    <div class="login-privacy">Tvoje heslo vidí len Google, nie táto aplikácia. Ukladáme len tvoje záznamy o jedle, váhe a pohybe.</div>
+  </div>
+</div>
 
 <!-- ONBOARDING MODAL -->
 <div class="ob-overlay" id="obOverlay" style="display:none">
@@ -2802,6 +2906,11 @@ button:focus-visible, input:focus-visible, select:focus-visible{
         </div>
       </div>
       <div class="card">
+        <div class="card-title">Účet</div>
+        <div id="accountInfo" style="font-size:13px;color:var(--mid);margin-bottom:12px;line-height:1.5">Lokálny režim (bez prihlásenia)</div>
+        <button class="btn btn-og" id="signOutBtn" onclick="signOutUser()"><i data-lucide="log-out"></i> Odhlásiť sa</button>
+      </div>
+      <div class="card">
         <div class="card-title">Dáta</div>
         <button class="btn btn-og" style="margin-bottom:8px" onclick="exportData()"><i data-lucide="download"></i> Export JSON</button>
         <button class="btn btn-og" style="margin-bottom:8px" onclick="$('importFile').click()"><i data-lucide="upload"></i> Import JSON</button>
@@ -2901,14 +3010,129 @@ const Storage = {
   },
   set(key, value) {
     localStorage.setItem(key, value);
+    // mirror to cloud if signed in (debounced)
+    if(window.cloudSync) cloudSync.scheduleSync();
   },
   remove(key) {
     localStorage.removeItem(key);
+    if(window.cloudSync) cloudSync.scheduleSync();
   },
   keys() {
     return Object.keys(localStorage);
   }
 };
+
+/* ============================================================
+   FIREBASE + CLOUD SYNC
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyARQuqzTAMW4JilE7H0aH6DpvBhygIdhOU",
+  authDomain: "nutritrack-d4a44.firebaseapp.com",
+  projectId: "nutritrack-d4a44",
+  storageBucket: "nutritrack-d4a44.firebasestorage.app",
+  messagingSenderId: "1010379006818",
+  appId: "1:1010379006818:web:0f3145b5c6c2788d8c023b"
+};
+
+let fbAuth = null, fbDB = null, currentUser = null;
+
+function initFirebase(){
+  try{
+    firebase.initializeApp(firebaseConfig);
+    fbAuth = firebase.auth();
+    fbDB = firebase.firestore();
+    return true;
+  }catch(e){
+    console.error('Firebase init failed', e);
+    return false;
+  }
+}
+
+// All app data keys that should sync to cloud
+function collectAllData(){
+  const data = {};
+  Storage.keys().filter(k=>k.startsWith('nt_')).forEach(k=>{
+    data[k] = localStorage.getItem(k);
+  });
+  return data;
+}
+
+// Cloud sync controller
+const cloudSync = {
+  timer: null,
+  scheduleSync(){
+    if(!currentUser) return;
+    setSyncDot('syncing');
+    clearTimeout(this.timer);
+    // debounce — wait 1.5s after last change, then push
+    this.timer = setTimeout(()=>this.pushToCloud(), 1500);
+  },
+  async pushToCloud(){
+    if(!currentUser || !fbDB) return;
+    try{
+      const data = collectAllData();
+      await fbDB.collection('users').doc(currentUser.uid).set({
+        data: data,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      setSyncDot('ok');
+    }catch(e){
+      console.error('Cloud push failed', e);
+      setSyncDot('error');
+    }
+  },
+  async pullFromCloud(){
+    if(!currentUser || !fbDB) return null;
+    try{
+      const doc = await fbDB.collection('users').doc(currentUser.uid).get();
+      if(doc.exists){
+        return doc.data().data || null;
+      }
+      return null;
+    }catch(e){
+      console.error('Cloud pull failed', e);
+      return null;
+    }
+  }
+};
+window.cloudSync = cloudSync;
+
+function setSyncDot(state){
+  const dot = document.getElementById('syncDot');
+  if(!dot) return;
+  dot.className = 'sync-dot' + (state==='syncing'?' syncing':state==='error'?' error':'');
+}
+
+// Sign in with Google
+function signInGoogle(){
+  const note = document.getElementById('loginNote');
+  note.textContent = '';
+  const provider = new firebase.auth.GoogleAuthProvider();
+  fbAuth.signInWithPopup(provider).catch(err=>{
+    console.error('Sign-in error', err);
+    if(err.code === 'auth/popup-blocked'){
+      note.textContent = 'Popup bol zablokovaný. Povoľ popupy a skús znova.';
+    } else if(err.code === 'auth/popup-closed-by-user'){
+      note.textContent = 'Prihlásenie zrušené.';
+    } else {
+      note.textContent = 'Chyba prihlásenia: '+err.message;
+    }
+  });
+}
+
+function signOutUser(){
+  if(!confirm('Odhlásiť sa? Tvoje dáta zostanú bezpečne v cloude.')) return;
+  fbAuth.signOut();
+}
+
+// Merge cloud data into local (cloud wins for existing keys)
+function applyCloudData(cloudData){
+  if(!cloudData) return;
+  Object.entries(cloudData).forEach(([k,v])=>{
+    if(k.startsWith('nt_')) localStorage.setItem(k, v);
+  });
+}
+
 
 /* ---------- DEFAULT SETTINGS ---------- */
 const DEFAULT_SETTINGS = {
@@ -4879,10 +5103,14 @@ function exportData(){
   URL.revokeObjectURL(url);
   toast('Exportované 📥');
 }
-function clearAll(){
+async function clearAll(){
   if(!confirm('Naozaj vymazať VŠETKY dáta? Toto sa nedá vrátiť.')) return;
   if(!confirm('Si si istý? Stratíš všetky záznamy.')) return;
-  Storage.keys().filter(k=>k.startsWith('nt_')).forEach(k=>Storage.remove(k));
+  Storage.keys().filter(k=>k.startsWith('nt_')).forEach(k=>localStorage.removeItem(k));
+  // also clear cloud
+  if(currentUser && fbDB){
+    try{ await fbDB.collection('users').doc(currentUser.uid).set({data:{}, updatedAt: firebase.firestore.FieldValue.serverTimestamp()}); }catch(e){}
+  }
   location.reload();
 }
 function importData(event){
@@ -4893,7 +5121,7 @@ function importData(event){
     return;
   }
   const reader = new FileReader();
-  reader.onload = e => {
+  reader.onload = async e => {
     try{
       const data = JSON.parse(e.target.result);
       let imported = 0;
@@ -4916,7 +5144,9 @@ function importData(event){
       Storage.set('nt_fav_migrated', '1');
       Storage.set('nt_onboarded', '1');
       if(imported===0){ toast('Neplatný súbor'); return; }
-      toast('Import úspešný ✅ – načítavám…');
+      toast('Import úspešný ✅ – načítavam…');
+      // push imported data to cloud before reload
+      if(currentUser){ await cloudSync.pushToCloud(); }
       setTimeout(()=>location.reload(), 1000);
     }catch(err){
       toast('Chyba: neplatný JSON');
@@ -5485,7 +5715,92 @@ function init(){
   // Render Lucide icons
   if(window.lucide) lucide.createIcons();
 }
-init();
+
+/* ============================================================
+   BOOT SEQUENCE — Firebase auth gate
+   ============================================================ */
+let appBooted = false;
+
+function showLogin(){
+  document.body.classList.add('not-authed');
+  const ls = document.getElementById('loginScreen');
+  if(ls) ls.style.display = 'flex';
+}
+function hideLogin(){
+  document.body.classList.remove('not-authed');
+  const ls = document.getElementById('loginScreen');
+  if(ls) ls.style.display = 'none';
+}
+
+async function bootAuthedApp(user){
+  currentUser = user;
+  hideLogin();
+
+  // Pull cloud data (if any) and merge into local cache
+  setSyncDot('syncing');
+  const cloudData = await cloudSync.pullFromCloud();
+
+  if(cloudData && Object.keys(cloudData).length){
+    // Cloud has data → use it as source of truth
+    applyCloudData(cloudData);
+  } else {
+    // No cloud data yet → this is first login. Push current local data up.
+    await cloudSync.pushToCloud();
+  }
+  setSyncDot('ok');
+
+  // Now boot the app UI (only once)
+  if(!appBooted){
+    appBooted = true;
+    init();
+  } else {
+    // re-render current view with fresh data
+    renderDash();
+  }
+  // show user name/sync in settings if present
+  updateAccountUI(user);
+}
+
+function updateAccountUI(user){
+  const el = document.getElementById('accountInfo');
+  if(el && user){
+    el.innerHTML = 'Prihlásený ako <b>'+(user.displayName||user.email||'používateľ')+'</b> <span class="sync-dot" id="syncDot"></span>';
+  }
+}
+
+// Start: init Firebase, then watch auth state
+function startBoot(attempt){
+  attempt = attempt || 0;
+  if(typeof firebase === 'undefined' || !firebase.initializeApp){
+    if(attempt < 20){
+      // SDK not loaded yet — wait and retry (up to ~5s)
+      setTimeout(()=>startBoot(attempt+1), 250);
+      return;
+    }
+    // gave up — Firebase truly unavailable, run local-only
+    console.warn('Firebase SDK did not load — running in local-only mode');
+    hideLogin();
+    if(!appBooted){ appBooted = true; init(); }
+    return;
+  }
+  // SDK is ready
+  if(initFirebase()){
+    fbAuth.onAuthStateChanged(user=>{
+      if(user){
+        bootAuthedApp(user);
+      } else {
+        currentUser = null;
+        appBooted = false;
+        showLogin();
+      }
+    });
+  } else {
+    console.warn('Firebase init failed — running in local-only mode');
+    hideLogin();
+    if(!appBooted){ appBooted = true; init(); }
+  }
+}
+startBoot();
 </script>
 </body>
 </html>

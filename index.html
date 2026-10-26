@@ -2,6 +2,8 @@
 <html lang="sk">
 <head>
 <meta charset="UTF-8">
+<!-- Only these outside addresses may be used (v24): the libraries (cdnjs, unpkg, gstatic), the fonts, and Google sign-in and Firestore. Anything else the browser refuses. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://apis.google.com; frame-src https://nutritrack-d4a44.firebaseapp.com https://apis.google.com https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="description" content="NutriTrack — sledovanie jedál, váhy, pohybu, spánku a vody. Osobný wellness tracker.">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -5099,7 +5101,7 @@ function exportData(){
     lastGrams:  getLastGrams(),
     days:       days,
     exportDate: new Date().toISOString(),
-    appVersion: 'nutritrack-v23'
+    appVersion: 'nutritrack-v24'
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);

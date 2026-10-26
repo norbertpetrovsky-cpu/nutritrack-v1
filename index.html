@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="https://unpkg.com/lucide@1.55.0/dist/umd/lucide.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3036,6 +3036,12 @@ const firebaseConfig = {
 
 let fbAuth = null, fbDB = null, currentUser = null;
 
+// Only the owner's account may use the app (v23). The Firestore rules allow the same account only.
+const OWNER_UID = '7gJIrKUJALT182r1DlSMlZVXj2K3';
+// The cloud is written only after it has been read in this session, so a failed read can never
+// overwrite it with this device's data (v23). pullRetry tries the read again while it is failing.
+let cloudReady = false, pullRetry = null;
+
 function initFirebase(){
   try{
     firebase.initializeApp(firebaseConfig);
@@ -3061,14 +3067,14 @@ function collectAllData(){
 const cloudSync = {
   timer: null,
   scheduleSync(){
-    if(!currentUser) return;
+    if(!currentUser || !cloudReady) return;
     setSyncDot('syncing');
     clearTimeout(this.timer);
     // debounce — wait 1.5s after last change, then push
     this.timer = setTimeout(()=>this.pushToCloud(), 1500);
   },
   async pushToCloud(){
-    if(!currentUser || !fbDB) return;
+    if(!currentUser || !fbDB || !cloudReady) return;
     try{
       const data = collectAllData();
       await fbDB.collection('users').doc(currentUser.uid).set({
@@ -3081,17 +3087,18 @@ const cloudSync = {
       setSyncDot('error');
     }
   },
+  // Tells the three outcomes apart: 'found' (with data), 'missing' (no record yet), 'error' (could not read).
   async pullFromCloud(){
-    if(!currentUser || !fbDB) return null;
+    if(!currentUser || !fbDB) return {status:'error'};
     try{
-      const doc = await fbDB.collection('users').doc(currentUser.uid).get();
+      const doc = await fbDB.collection('users').doc(currentUser.uid).get({source:'server'});
       if(doc.exists){
-        return doc.data().data || null;
+        return {status:'found', data: doc.data().data || null};
       }
-      return null;
+      return {status:'missing'};
     }catch(e){
       console.error('Cloud pull failed', e);
-      return null;
+      return {status:'error'};
     }
   }
 };
@@ -5092,7 +5099,7 @@ function exportData(){
     lastGrams:  getLastGrams(),
     days:       days,
     exportDate: new Date().toISOString(),
-    appVersion: 'v17c'
+    appVersion: 'nutritrack-v23'
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
@@ -5146,7 +5153,8 @@ function importData(event){
       if(imported===0){ toast('Neplatný súbor'); return; }
       toast('Import úspešný ✅ – načítavam…');
       // push imported data to cloud before reload
-      if(currentUser){ await cloudSync.pushToCloud(); }
+      // An import replaces the data on purpose, so it is sent up even if the cloud could not be read.
+      if(currentUser){ cloudReady = true; clearTimeout(pullRetry); await cloudSync.pushToCloud(); }
       setTimeout(()=>location.reload(), 1000);
     }catch(err){
       toast('Chyba: neplatný JSON');
@@ -5192,7 +5200,7 @@ function importCSV(event){
         const item = {
           name,
           kcal: Math.round(kcal),
-          protein: iUnit>=0 ? (parseFloat(cols[iProt])||0) : 0,
+          protein: iProt>=0 ? (parseFloat(cols[iProt])||0) : 0,
           fat:     iFat>=0  ? (parseFloat(cols[iFat])||0)  : 0,
           carbs:   iCarb>=0 ? (parseFloat(cols[iCarb])||0) : 0,
           cat:     iCat>=0  ? (cols[iCat]||'Iné')          : 'Iné'
@@ -5732,22 +5740,54 @@ function hideLogin(){
   if(ls) ls.style.display = 'none';
 }
 
+// Another account is signed out at once; the rules would refuse it the data anyway.
+function refuseAccount(){
+  currentUser = null;
+  cloudReady = false;
+  fbAuth.signOut();
+  showLogin();
+  const note = document.getElementById('loginNote');
+  if(note) note.textContent = 'Prihlásenie je povolené len pre majiteľa aplikácie.';
+}
+
+// Reads the cloud before anything is written to it. On a failed read this device keeps working,
+// nothing is written, the dot turns red, and the read is tried again.
+async function syncFromCloud(retrying){
+  setSyncDot('syncing');
+  const res = await cloudSync.pullFromCloud();
+  if(!currentUser) return;
+  if(res.status === 'error'){
+    cloudReady = false;
+    setSyncDot('error');
+    clearTimeout(pullRetry);
+    pullRetry = setTimeout(()=>{ if(currentUser && !cloudReady) syncFromCloud(true); }, 15000);
+    return;
+  }
+  clearTimeout(pullRetry);
+  if(res.status === 'found' && res.data && Object.keys(res.data).length){
+    // Cloud has data → use it as source of truth
+    applyCloudData(res.data);
+    cloudReady = true;
+    setSyncDot('ok');
+    if(retrying){
+      // Entries made on this device while the cloud could not be read are sent up now.
+      cloudSync.scheduleSync();
+      if(appBooted) renderDash();
+    }
+  } else {
+    // No cloud data yet → this is first login. Push current local data up.
+    cloudReady = true;
+    await cloudSync.pushToCloud();
+  }
+}
+window.addEventListener('online', ()=>{ if(currentUser && !cloudReady) syncFromCloud(true); });
+
 async function bootAuthedApp(user){
+  if(user.uid !== OWNER_UID){ refuseAccount(); return; }
   currentUser = user;
   hideLogin();
 
-  // Pull cloud data (if any) and merge into local cache
-  setSyncDot('syncing');
-  const cloudData = await cloudSync.pullFromCloud();
-
-  if(cloudData && Object.keys(cloudData).length){
-    // Cloud has data → use it as source of truth
-    applyCloudData(cloudData);
-  } else {
-    // No cloud data yet → this is first login. Push current local data up.
-    await cloudSync.pushToCloud();
-  }
-  setSyncDot('ok');
+  await syncFromCloud(false);
 
   // Now boot the app UI (only once)
   if(!appBooted){
@@ -5765,6 +5805,8 @@ function updateAccountUI(user){
   const el = document.getElementById('accountInfo');
   if(el && user){
     el.innerHTML = 'Prihlásený ako <b>'+(user.displayName||user.email||'používateľ')+'</b> <span class="sync-dot" id="syncDot"></span>';
+    // the dot is drawn anew here, so it shows the state again (v23)
+    setSyncDot(cloudReady ? 'ok' : 'error');
   }
 }
 
@@ -5790,6 +5832,8 @@ function startBoot(attempt){
         bootAuthedApp(user);
       } else {
         currentUser = null;
+        cloudReady = false;
+        clearTimeout(pullRetry);
         appBooted = false;
         showLogin();
       }
